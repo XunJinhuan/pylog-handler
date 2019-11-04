@@ -2,12 +2,14 @@
 
 """
 This is a logging handler of rabbitmq.
+asynchronous connect to rabbitmq and send log.
 """
 
 import sys
 import json
 import time
-import pika
+import asyncio
+import aiormq
 import logging
 import traceback
 from datetime import datetime
@@ -22,7 +24,7 @@ from .utils import (
 )
 
 
-class RabbitmqHandler(logging.Handler):
+class AioRabbitmqHandler(logging.Handler):
     def __init__(
             self,
             appname: str,
@@ -45,7 +47,7 @@ class RabbitmqHandler(logging.Handler):
         If fields is not in log data, will use "*" replace. If element of routing_key is fields of message,
         should use dot separate, eg: 'message.field1.fields2', 'message.field1'.
         """
-        super(RabbitmqHandler, self).__init__(level)
+        super(AioRabbitmqHandler, self).__init__(level)
         if len(appname) > 100:
             raise ValueError("application name is to long")
         self.appname = appname
@@ -70,23 +72,19 @@ class RabbitmqHandler(logging.Handler):
 
         self.connection = None
         self.channel = None
-        self.routing = None
 
         self.is_exchange_declared = False
+        self.is_closed = True
+        self.init_connection = asyncio.Queue(maxsize=1)
+        self.loop = None
 
-        self.connect()
-        self.is_closed = False
-
-    def connect(self):
-        """
-        connent rabbitmq server
-        """
-        param = pika.URLParameters(self.uri)
-        self.connection = pika.BlockingConnection(param)
-        self.channel = self.connection.channel()
-        sys.stdout.write('%s - stdout - [rabbitmq] Connect success.\n' % datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    async def connect(self):
+        self.connection = await aiormq.connect(self.uri)
+        self.channel = await self.connection.channel()
+        msg = '{0} - [rabbitmq] Connect to {1} success.\n'.format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), self.uri)
+        sys.stdout.write(msg)
         if self.is_exchange_declared is False:
-            self.channel.exchange_declare(
+            await self.channel.exchange_declare(
                 exchange=self.exchange,
                 exchange_type="topic",
                 passive=False,
@@ -94,6 +92,18 @@ class RabbitmqHandler(logging.Handler):
                 auto_delete=False
             )
             self.is_exchange_declared = True
+
+    async def rabbit_connect(self):
+        if self.is_closed:
+            await self.init_connection.put(1)
+            if self.is_closed:
+                await self.connect()
+                self.is_closed = False
+        if not self.init_connection.empty():
+            try:
+                self.init_connection.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
 
     def get_routing_key(self, data: dict):
         origin_data = data
@@ -119,7 +129,7 @@ class RabbitmqHandler(logging.Handler):
             routing = routing[:255]
         return routing
 
-    def _emit(self, record):
+    async def _emit(self, record):
         log_data = dict()
         origin_data = record.__dict__.copy()
         origin_data[FMT_ASCTIME] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(origin_data.get(FMT_CREATED)))
@@ -127,41 +137,45 @@ class RabbitmqHandler(logging.Handler):
         for field in self.origin_fields:
             log_data[field] = origin_data.get(field)
         routing = self.get_routing_key(origin_data)
-        self.channel.basic_publish(
+        await self.channel.basic_publish(
             exchange=self.exchange,
             routing_key=routing,
-            body=json.dumps(log_data, ensure_ascii=False),
-            properties=pika.BasicProperties(delivery_mode=2)
+            body=json.dumps(log_data, ensure_ascii=False).encode("utf-8"),
+            properties=aiormq.spec.Basic.Properties(delivery_mode=2)
         )
+
+    async def con_close(self):
+        try:
+            if self.connection:
+                await self.connection.close()
+        finally:
+            self.connection = None
+            self.channel = None
+
+    async def base_publish(self, record):
+        try:
+            if self.is_closed is True:
+                await self.rabbit_connect()
+            await self._emit(record)
+            return True
+        except Exception as e:
+            sys.stdout.write("publish log error, maybe connection closed:{0}\n".format(e))
+            traceback.print_exc()
+            await self.con_close()
+            self.is_closed = True
+            return False
+
+    async def publish(self, record):
+        res = await self.base_publish(record)
+        if not res:  # unsuccessfully, maybe connection is closed, publish again
+            await self.base_publish(record)
 
     def emit(self, record):
         self.acquire()
-        count = 2
-        while count > 0:
-            try:
-                if self.is_closed is True:
-                    self.connect()
-                    self.is_closed = False
-                self._emit(record)
-                break
-            except Exception:
-                self.handleError(record)
-                traceback.print_exc(file=sys.stdout)
-                self.close()
-                self.is_closed = True
-                count -= 1
-        self.release()
-
-    def close(self):
-        """
-        clear when closing
-        """
         try:
-            if self.channel and self.channel.is_closed is False:
-                self.channel.close()
-                self.channel = None
-            if self.connection and self.connection.is_closed is False:
-                self.connection.close()
-                self.connection = None
-        finally:
-            pass
+            self.loop = asyncio.get_event_loop()
+            self.loop.create_task(self.publish(record))
+        except Exception:
+            self.handleError(record)
+            traceback.print_exc()
+        self.release()
