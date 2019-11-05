@@ -19,20 +19,6 @@ from .utils import LOGGING_FORMAT_MAPPER, FMT_MESSAGE, FMT_ASCTIME, FMT_LEVELNAM
 _mysql_fail_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "log/msqlhandler_error.log")
 
 
-# 默认的日志表的用户自定义字段
-DEFAULT_FIELDS = {
-    "user": "String(30)",      # 用户名
-    "url": "String(500)",      # 用户访问的url
-    "method": "String(10)",    # 方法
-    "status": "Integer",       # 状态响应码
-    "address": "String(32)",   # 用户地址
-    "browser": "String(200)",  # 浏览器标识符
-    "os": "String(50)",        # 用户操作系统
-    "host": "String(32)",      # 服务器地址
-    "port": "Integer",         # 服务器端口
-}
-
-
 DEFAULT_ORIGIN_FIELDS = [FMT_LEVELNAME]
 
 

@@ -69,7 +69,7 @@ async def main():
     dictConfig(LOGGING)
     logger = logging.getLogger("aiohandler")
     logger.info({"field": "aa"})
-    await asyncio.sleep(3)  # wait send log send finish
+    await asyncio.sleep(3)  # wait send log finish
 
 
 if __name__ == '__main__':
