@@ -55,6 +55,28 @@ DEFAULT_FORMAT = [
 DEFAULT_EXCHANGE = "python.topic.logging"
 
 
+# logging origin fields mapper
+LOGGING_FORMAT_MAPPER = {
+    FMT_NAME: "String(50)",
+    FMT_LEVELNO: "Integer",
+    FMT_LEVELNAME: "String(20)",
+    FMT_PATHNAME:  "String(200)",
+    FMT_FILENAME: "String(100)",
+    FMT_MODULE: "String(100)",
+    FMT_LINENO: "Integer",
+    FMT_FUNCNAME: "String(100)",
+    FMT_CREATED: "Integer",
+    FMT_ASCTIME: "String(30)",
+    FMT_MSECS: "Integer",
+    FMT_RELATIVECREATED: "Integer",
+    FMT_THREAD: "Integer",
+    FMT_THREADNAME: "String(100)",
+    FMT_PROCESS: "Integer",
+    FMT_PROCESSNAME: "String(100)",
+    # FMT_MESSAGE: "String(500)"
+}
+
+
 class LogOriginFieldError(Exception):
     def __init__(self, msg=None):
         if msg is None:

@@ -75,3 +75,48 @@ async def main():
 if __name__ == '__main__':
     asyncio.run(main())
 ```
+
+### SQL Handler
+```python
+import logging
+from logging.config import dictConfig
+
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        "sqlite": {
+            "level": "INFO",
+            "class": "handler.mysql.MySQLHandler",
+            "uri": "sqlite:///E:\\code\\pylog-handler\\testlog.db",
+            "table_name": "test",
+            "origin_field": ["asctime", "levelname"],
+            "new_field": {"field": "String(50)"}
+        },
+        "mysql": {
+            "level": "INFO",
+            "class": "handler.mysql.MySQLHandler",
+            "uri": "mysql+pymysql://root:123457@127.0.0.1:3306/test",
+            "table_name": "test",
+            "origin_field": ["asctime", "levelname"],
+            "new_field": {"message": "String(50)"}
+        }
+    },
+    'loggers': {
+        "sqlhandler": {
+            "handlers": ["sqlite", "mysql"],
+            "level": "INFO",
+            'propagate': False
+        },
+    }
+}
+
+
+def main():
+    dictConfig(LOGGING)
+    logger = logging.getLogger("sqlhandler")
+    logger.info({"field": "bbq"})
+
+
+if __name__ == '__main__':
+    main()
+```
