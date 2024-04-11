@@ -1,5 +1,5 @@
 aiormq==3.0.1
-idna==2.8
+idna==3.7
 multidict==4.5.2
 pamqp==2.3.0
 pika==1.1.0
